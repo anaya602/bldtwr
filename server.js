@@ -164,7 +164,9 @@ class TowerRoom extends Room {
       if(client.sessionId!==this.state.blindId) return;
       const p=this.state.players.get(client.sessionId);
       if(!p||p.hasPending) return;
-      p.pendingX=clamp(typeof data.x==="number"?data.x:400,50,750);
+      const SPAWN_MARGIN = 80;
+      const spawnX = Math.round(SPAWN_MARGIN + Math.random() * (800 - SPAWN_MARGIN * 2));
+      p.pendingX = spawnX;
       p.pendingW=clamp(typeof data.w==="number"?data.w:60, 20,120);
       p.pendingH=clamp(typeof data.h==="number"?data.h:30, 15,60);
       p.hasPending=true;

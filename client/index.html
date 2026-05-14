@@ -145,21 +145,15 @@ input[type=text]:focus{border-color:#7c3aed}
       <div id="blind-title">🙈 You are BLINDFOLDED</div>
       <div id="blind-guidance">Waiting for guidance from your team…</div>
       <div id="blind-controls">
-        <div class="row">
-          <input id="block-x" type="number" placeholder="X position (50-750)" min="50" max="750" value="400" style="flex:1"/>
-          <input id="block-w" type="number" placeholder="Width (20-120)" min="20" max="120" value="60"/>
-        </div>
-        <div class="row">
-          <input id="block-h" type="number" placeholder="Height (15-60)" min="15" max="60" value="30"/>
-          <button id="spawn-btn" class="btn btn-primary" style="flex:1">Spawn Block</button>
-        </div>
+        <!-- Change 3: number inputs removed — X is server-randomised on spawn -->
+        <button id="spawn-btn" class="btn btn-primary" style="width:100%;padding:14px;font-size:1.05rem">Spawn block</button>
         <div class="blind-row">
-          <button class="btn btn-secondary" id="move-left">◀ Move Left</button>
-          <button class="btn btn-secondary" id="move-right">Move Right ▶</button>
-          <button class="btn btn-primary"  id="drop-btn">⬇ Drop!</button>
+          <button class="btn btn-secondary" id="move-left" style="flex:1">◀ Left</button>
+          <button class="btn btn-secondary" id="move-right" style="flex:1">Right ▶</button>
+          <button class="btn btn-primary" id="drop-btn" style="flex:1">⬇ Drop!</button>
         </div>
-        <div id="pending-info">No block spawned yet</div>
-        <div class="key-hint">Keyboard: A/D = move  |  Space = drop  |  S = spawn</div>
+        <div id="pending-info">Press Spawn — block appears at a random position</div>
+        <div class="key-hint">S = spawn  |  A / ← = move left  |  D / → = move right  |  Space = drop</div>
       </div>
     </div>
     <div id="overlay" class="hidden">
@@ -263,6 +257,11 @@ function initPixi(){
     lbl.x=4; lbl.y=y-10; pixiApp.stage.addChild(lbl);
   }
   pendingSprite=new PIXI.Graphics(); pixiApp.stage.addChild(pendingSprite);
+  // Position label above pending block — visible to all players so teammates
+  // can call out "you are at 340" without guessing
+  window._pendingLabel = new PIXI.Text("", {fill:0xfbbf24, fontSize:12, fontFamily:"monospace", fontWeight:"bold"});
+  window._pendingLabel.anchor.set(0.5,1);
+  pixiApp.stage.addChild(window._pendingLabel);
   pixiApp.ticker.add(()=>renderLoop());
 }
 
@@ -295,11 +294,20 @@ function renderLoop(){
     if(!blockIds.has(id)){pixiApp.stage.removeChild(blockSprites[id]);delete blockSprites[id];delete interpBuffers[id];}
   }
   pendingSprite.clear();
-  if(isBlind&&hasPending){
+  // Change 2: visible to ALL players (not just blind)
+  if(hasPending){
     pendingSprite.lineStyle(2,0xfbbf24,0.9); pendingSprite.beginFill(0xfbbf24,0.25);
     pendingSprite.drawRoundedRect(-pendingW/2,-pendingH/2,pendingW,pendingH,4); pendingSprite.endFill();
     pendingSprite.position.set(pendingX,30);
-    pendingSprite.lineStyle(1,0xfbbf24,0.3); pendingSprite.moveTo(0,pendingH/2); pendingSprite.lineTo(0,FLOOR_Y-30);
+    pendingSprite.lineStyle(1,0xfbbf24,0.4); pendingSprite.moveTo(0,pendingH/2); pendingSprite.lineTo(0,FLOOR_Y-30);
+    // Live X-position label — sighted players can read exact number aloud
+    if(window._pendingLabel){
+      window._pendingLabel.text="x:"+Math.round(pendingX);
+      window._pendingLabel.position.set(pendingX, 14);
+      window._pendingLabel.visible=true;
+    }
+  } else {
+    if(window._pendingLabel) window._pendingLabel.visible=false;
   }
 }
 
@@ -409,9 +417,10 @@ function updateBlindUI(){
 }
 
 function updatePendingInfo(){
+  // Pending info: shown in blind overlay only
   $("pending-info").textContent=hasPending
-    ?`Block ready at X=${Math.round(pendingX)}, W=${pendingW}, H=${pendingH}`
-    :"No block spawned yet";
+    ?`Block at x\u202f${Math.round(pendingX)} — move left/right then drop`
+    :"Press Spawn — block appears at a random position";
 }
 
 function showRoundEnd(){
@@ -449,8 +458,10 @@ function sysMsg(text){ appendChat("",text,true); }
 function escHtml(str){ return String(str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
 function sendSpawn(){
-  if(!room||!isBlind) return;
-  room.send("spawn_block",{x:parseInt($("block-x").value)||400,w:parseInt($("block-w").value)||60,h:parseInt($("block-h").value)||30});
+  // Change 3: no position data sent — server generates random X, W, H
+  // hasPending guard here matches server guard (double-tap = no-op)
+  if(!room||!isBlind||hasPending) return;
+  room.send("spawn_block",{});
 }
 function sendMove(dir){ if(!room||!isBlind||!hasPending) return; room.send("move_block",{dx:dir*20}); }
 function sendDrop(){ if(!room||!isBlind||!hasPending) return; room.send("drop_block"); }

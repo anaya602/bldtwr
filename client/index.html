@@ -52,7 +52,6 @@ input[type=text]:focus{border-color:#7c3aed}
 #blind-controls{display:flex;flex-direction:column;gap:10px;width:100%;max-width:420px}
 #blind-controls input{font-size:1rem}
 .blind-row{display:flex;gap:10px}
-#pending-info{color:#94a3b8;font-size:.9rem;text-align:center;min-height:1.2em}
 #side-panel{width:260px;height:100vh;background:#12112a;border-left:1px solid #1e1b4b;display:flex;flex-direction:column;overflow:hidden}
 #score-panel{padding:14px;border-bottom:1px solid #1e1b4b}
 #score-panel h3{font-size:.75rem;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
@@ -152,7 +151,6 @@ input[type=text]:focus{border-color:#7c3aed}
           <button class="btn btn-secondary" id="move-right" style="flex:1">Right ▶</button>
           <button class="btn btn-primary" id="drop-btn" style="flex:1">⬇ Drop!</button>
         </div>
-        <div id="pending-info">Press Spawn — block appears at a random position</div>
         <div class="key-hint">S = spawn  |  A / ← = move left  |  D / → = move right  |  Space = drop</div>
       </div>
     </div>
@@ -234,6 +232,7 @@ const CANVAS_W=800, CANVAS_H=580, FLOOR_Y=550;
 
 let client,room,myName="",isBlind=false,hasPending=false;
 let pendingX=400,pendingW=60,pendingH=30;
+let blindHasPending=false,blindPendingX=400,blindPendingW=60,blindPendingH=30;
 let pixiApp,blockSprites={},pendingSprite=null,interpBuffers={};
 
 const $=id=>document.getElementById(id);
@@ -295,15 +294,14 @@ function renderLoop(){
   }
   pendingSprite.clear();
   // Change 2: visible to ALL players (not just blind)
-  if(hasPending){
+  if(blindHasPending){
     pendingSprite.lineStyle(2,0xfbbf24,0.9); pendingSprite.beginFill(0xfbbf24,0.25);
-    pendingSprite.drawRoundedRect(-pendingW/2,-pendingH/2,pendingW,pendingH,4); pendingSprite.endFill();
-    pendingSprite.position.set(pendingX,30);
-    pendingSprite.lineStyle(1,0xfbbf24,0.4); pendingSprite.moveTo(0,pendingH/2); pendingSprite.lineTo(0,FLOOR_Y-30);
-    // Live X-position label — sighted players can read exact number aloud
+    pendingSprite.drawRoundedRect(-blindPendingW/2,-blindPendingH/2,blindPendingW,blindPendingH,4); pendingSprite.endFill();
+    pendingSprite.position.set(blindPendingX,30);
+    pendingSprite.lineStyle(1,0xfbbf24,0.4); pendingSprite.moveTo(0,blindPendingH/2); pendingSprite.lineTo(0,FLOOR_Y-30);
     if(window._pendingLabel){
-      window._pendingLabel.text="x:"+Math.round(pendingX);
-      window._pendingLabel.position.set(pendingX, 14);
+      window._pendingLabel.text="x:"+Math.round(blindPendingX);
+      window._pendingLabel.position.set(blindPendingX,14);
       window._pendingLabel.visible=true;
     }
   } else {
@@ -362,12 +360,25 @@ function bindRoomEvents(){
     p.listen("score",()=>renderScores());
     p.listen("isBlind",()=>{
       if(sessionId===room.sessionId){isBlind=p.isBlind;updateBlindUI();}
+      if(!p.isBlind) blindHasPending=false;
       renderScores();
     });
-    p.listen("hasPending",()=>{if(sessionId===room.sessionId){hasPending=p.hasPending;updatePendingInfo();}});
-    p.listen("pendingX",()=>{if(sessionId===room.sessionId){pendingX=p.pendingX;updatePendingInfo();}});
-    p.listen("pendingW",()=>{if(sessionId===room.sessionId) pendingW=p.pendingW;});
-    p.listen("pendingH",()=>{if(sessionId===room.sessionId) pendingH=p.pendingH;});
+    p.listen("hasPending",()=>{
+      if(sessionId===room.sessionId) hasPending=p.hasPending;
+      if(p.isBlind) blindHasPending=p.hasPending;
+    });
+    p.listen("pendingX",()=>{
+      if(sessionId===room.sessionId) pendingX=p.pendingX;
+      if(p.isBlind) blindPendingX=p.pendingX;
+    });
+    p.listen("pendingW",()=>{
+      if(sessionId===room.sessionId) pendingW=p.pendingW;
+      if(p.isBlind) blindPendingW=p.pendingW;
+    });
+    p.listen("pendingH",()=>{
+      if(sessionId===room.sessionId) pendingH=p.pendingH;
+      if(p.isBlind) blindPendingH=p.pendingH;
+    });
     renderLobby(); renderScores(); sysMsg(`${p.name} joined`);
   });
   room.state.players.onRemove((p)=>{ renderLobby(); renderScores(); sysMsg(`${p.name} left`); });
@@ -416,12 +427,6 @@ function updateBlindUI(){
   }
 }
 
-function updatePendingInfo(){
-  // Pending info: shown in blind overlay only
-  $("pending-info").textContent=hasPending
-    ?`Block at x\u202f${Math.round(pendingX)} — move left/right then drop`
-    :"Press Spawn — block appears at a random position";
-}
 
 function showRoundEnd(){
   $("overlay-title").textContent=`Round ${room.state.round} Over!`;
@@ -506,3 +511,4 @@ window.addEventListener("DOMContentLoaded",()=>{
 </script>
 </body>
 </html>
+

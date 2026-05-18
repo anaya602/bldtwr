@@ -1,27 +1,22 @@
 /**
  * ============================================================
- *  BLINDFOLD TOWER  —  server.js  (v1.2 — room code fix)
+ *  BLINDFOLD TOWER  —  server.js  (v1.4.0)
  *  Single-file Node.js server (Colyseus + Matter.js + Express)
  * ============================================================
  *
- *  BUG FIXED (v1.1 → v1.2):
- *  Colyseus default generateId() uses nanoid(9) with mixed-case
- *  alphanumeric + hyphen/underscore alphabet.
- *  Client input had maxlength="8" → last char was silently
- *  truncated → joinById() always failed with "room not found".
- *
- *  Also unusable over voice (Zoom): mixed case, ambiguous chars
- *  like O/0, I/1, B/8, hyphens are hard to dictate clearly.
- *
- *  FIX: Override roomId with a custom 6-char uppercase alpha code
- *  using only unambiguous letters (no O, I, B).
- *  Client maxlength updated to 6 to match.
- *  Client normalises to uppercase before sending join request.
- *
- *  SCHEMA FIX (v1.0 → v1.1):
- *  @colyseus/schema v2 requires defineTypes() + constructor init.
- *  Old type() decorator syntax left MapSchema/ArraySchema as
- *  undefined → .size threw "Cannot read properties of undefined".
+ *  Changelog:
+ *  v1.1 — Schema fix: @colyseus/schema v2 requires defineTypes()
+ *         + constructor new MapSchema(). Old type() decorator left
+ *         collections undefined → .size crash on first join.
+ *  v1.2 — Room code fix: Colyseus nanoid(9) IDs truncated by
+ *         client maxlength="8". Replaced with 6-char uppercase
+ *         custom generator (no O/I/B). Client normalises to upper.
+ *  v1.3 — Extension error suppressor added to client. 113-test
+ *         simulation suite (simulate.js) added.
+ *  v1.4 — spawn_block now generates random X/W/H server-side.
+ *         Pending block ghost visible to all players on canvas.
+ *         Live x-position label above ghost for sighted guidance.
+ *         Blind player UI simplified to Spawn / Move / Drop.
  */
 
 "use strict";
@@ -164,11 +159,14 @@ class TowerRoom extends Room {
       if(client.sessionId!==this.state.blindId) return;
       const p=this.state.players.get(client.sessionId);
       if(!p||p.hasPending) return;
+      // Change 1: random X per spawn — server-generated, client X ignored
+      // SPAWN_MARGIN keeps block clear of the static walls (x=-25 and x=825)
+      // with max block width 120, margin 80 guarantees full block is in bounds
       const SPAWN_MARGIN = 80;
-      const spawnX = Math.round(SPAWN_MARGIN + Math.random() * (800 - SPAWN_MARGIN * 2));
-      p.pendingX = spawnX;
-      p.pendingW=clamp(typeof data.w==="number"?data.w:60, 20,120);
-      p.pendingH=clamp(typeof data.h==="number"?data.h:30, 15,60);
+      p.pendingX = Math.round(SPAWN_MARGIN + Math.random() * (800 - SPAWN_MARGIN * 2));
+      // Random size variation per drop: width 30-100px, height 18-50px
+      p.pendingW = 30 + Math.round(Math.random() * 70);
+      p.pendingH = 18 + Math.round(Math.random() * 32);
       p.hasPending=true;
     });
 
@@ -330,7 +328,7 @@ const gameServer=new Server({
 });
 gameServer.define("tower",TowerRoom);
 gameServer.listen(PORT).then(()=>{
-  console.log(`\n🗼 Blindfold Tower v1.2 running on http://localhost:${PORT}`);
+  console.log(`\n🗼 Blindfold Tower v1.5.0 running on http://localhost:${PORT}`);
   console.log(`   Room codes: 6-char uppercase alpha (e.g. ZXKRAF)`);
   console.log(`   Colyseus Monitor: http://localhost:${PORT}/colyseus\n`);
 }).catch(err=>{console.error("Failed to start:",err);process.exit(1);});

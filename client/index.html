@@ -1,514 +1,250 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Blindfold Tower</title>
-<!--
-  CLIENT v1.2 — room code fix
-  Changes from v1.1:
-    • code-input maxlength: 8 → 6  (matches server 6-char code)
-    • joinRoom(): normalises input to UPPERCASE before sending
-    • room-code display: shows actual room.id (always 6 uppercase chars)
-    • Added explicit uppercase CSS on code-input for visual clarity
--->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
-<script src="https://unpkg.com/colyseus.js@0.15.13/dist/colyseus.js"></script>
-<style>
-*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{width:100%;height:100%;background:#0d0d1a;font-family:'Segoe UI',system-ui,sans-serif;color:#e0e0ff;overflow:hidden}
-.screen{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:16px}
-.screen.hidden{display:none!important}
-#landing{background:radial-gradient(ellipse at 50% 60%,#1a1a3e 0%,#0d0d1a 80%)}
-h1{font-size:2.8rem;font-weight:900;letter-spacing:2px;color:#a78bfa;text-shadow:0 0 30px #7c3aed88}
-.card{background:#1e1b4b;border:1px solid #4338ca55;border-radius:12px;padding:28px 36px;min-width:340px;display:flex;flex-direction:column;gap:14px}
-input[type=text]{background:#0f0e2a;border:1px solid #4338ca;border-radius:8px;padding:10px 14px;color:#e0e0ff;font-size:1rem;outline:none;transition:border-color .2s;width:100%}
-input[type=text]:focus{border-color:#7c3aed}
-.btn{padding:11px 24px;border-radius:8px;border:none;font-size:1rem;font-weight:700;cursor:pointer;transition:all .15s;letter-spacing:.5px}
-.btn-primary{background:#7c3aed;color:#fff}
-.btn-primary:hover{background:#6d28d9;transform:translateY(-1px);box-shadow:0 4px 15px #7c3aed55}
-.btn-secondary{background:#1e1b4b;color:#a78bfa;border:1px solid #4338ca}
-.btn-secondary:hover{background:#2d2980}
-.btn-danger{background:#dc2626;color:#fff}
-.row{display:flex;gap:10px}
-#lobby{background:radial-gradient(ellipse at 50% 40%,#1a1a3e 0%,#0d0d1a 80%);flex-direction:row;align-items:flex-start;justify-content:center;gap:24px;padding:24px}
-.lobby-box{background:#1e1b4b;border:1px solid #4338ca55;border-radius:12px;padding:20px;min-width:260px}
-.lobby-box h3{color:#a78bfa;margin-bottom:14px;font-size:1rem;letter-spacing:1px;text-transform:uppercase}
-#player-list{list-style:none;display:flex;flex-direction:column;gap:8px}
-#player-list li{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#13112a;border-radius:6px;font-size:.9rem}
-.badge{font-size:.7rem;padding:2px 8px;border-radius:20px;font-weight:700}
-.badge-host{background:#f59e0b22;color:#fbbf24;border:1px solid #f59e0b44}
-.badge-ready{background:#10b98122;color:#34d399;border:1px solid #10b98144}
-/* Room code: large, easy to read, share over Zoom */
-.room-code{font-size:2.4rem;font-weight:900;color:#a78bfa;letter-spacing:8px;text-align:center;background:#13112a;border-radius:8px;padding:14px;font-family:monospace}
-.hint{font-size:.78rem;color:#64748b;text-align:center}
-#game{flex-direction:row;align-items:flex-start;justify-content:center;gap:0;padding:0;background:#0d0d1a}
-#canvas-wrap{position:relative;flex-shrink:0}
-#canvas-wrap canvas{display:block}
-#blind-overlay{position:absolute;inset:0;background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;z-index:10;padding:30px}
-#blind-overlay.hidden{display:none}
-#blind-title{font-size:2.2rem;font-weight:900;color:#a78bfa}
-#blind-guidance{font-size:1.3rem;color:#fbbf24;text-align:center;max-width:500px;background:#1a1a3e;border:1px solid #fbbf2444;border-radius:10px;padding:16px 24px;min-height:60px}
-#blind-controls{display:flex;flex-direction:column;gap:10px;width:100%;max-width:420px}
-#blind-controls input{font-size:1rem}
-.blind-row{display:flex;gap:10px}
-#side-panel{width:260px;height:100vh;background:#12112a;border-left:1px solid #1e1b4b;display:flex;flex-direction:column;overflow:hidden}
-#score-panel{padding:14px;border-bottom:1px solid #1e1b4b}
-#score-panel h3{font-size:.75rem;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px}
-#score-list{list-style:none;display:flex;flex-direction:column;gap:6px}
-#score-list li{display:flex;justify-content:space-between;align-items:center;font-size:.88rem;padding:6px 8px;border-radius:6px;background:#1a1930}
-#score-list li.is-blind{background:#2d1f5e;border:1px solid #7c3aed55}
-#hud-panel{padding:10px 14px;border-bottom:1px solid #1e1b4b;display:flex;flex-direction:column;gap:4px}
-.hud-row{display:flex;justify-content:space-between;font-size:.82rem;color:#94a3b8}
-.hud-val{color:#e0e0ff;font-weight:700}
-#chat-area{flex:1;display:flex;flex-direction:column;overflow:hidden}
-#chat-msgs{flex:1;overflow-y:auto;padding:10px 12px;display:flex;flex-direction:column;gap:5px;scroll-behavior:smooth}
-.chat-msg{font-size:.82rem;line-height:1.4;word-break:break-word}
-.chat-from{color:#a78bfa;font-weight:700}
-.chat-sys{color:#fbbf24;font-style:italic}
-#chat-input-row{display:flex;gap:6px;padding:8px 10px;border-top:1px solid #1e1b4b}
-#chat-input{flex:1;font-size:.85rem;padding:7px 10px}
-#chat-send{padding:7px 14px;font-size:.82rem}
-#overlay{position:absolute;inset:0;background:#000a;z-index:20;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:18px}
-#overlay.hidden{display:none}
-#overlay-title{font-size:2rem;font-weight:900;color:#a78bfa}
-#overlay-body{font-size:1.1rem;color:#94a3b8;text-align:center;max-width:400px}
-#overlay-scores{list-style:none;display:flex;flex-direction:column;gap:8px;min-width:260px}
-#overlay-scores li{display:flex;justify-content:space-between;padding:10px 16px;background:#1e1b4b;border-radius:8px}
-.winner-row{border:1px solid #a78bfa55;color:#a78bfa;font-weight:700}
-#timer-bar-wrap{position:absolute;top:0;left:0;right:0;height:4px;background:#1e1b4b;z-index:5}
-#timer-bar{height:100%;background:#7c3aed;transition:width .5s linear,background .5s}
-#role-badge{position:absolute;top:8px;left:8px;z-index:6;padding:5px 12px;border-radius:20px;font-size:.8rem;font-weight:700;letter-spacing:.5px}
-#role-badge.sighted{background:#10b98122;color:#34d399;border:1px solid #10b98144}
-#role-badge.blind{background:#7c3aed22;color:#a78bfa;border:1px solid #7c3aed44}
-.key-hint{font-size:.72rem;color:#475569;text-align:center;margin-top:4px}
-#guidance-row{padding:6px 10px;border-top:1px solid #1e1b4b;display:flex;gap:6px}
-#guidance-input{flex:1;font-size:.82rem;padding:6px 10px}
-#guidance-send{padding:6px 12px;font-size:.78rem}
-#chat-msgs::-webkit-scrollbar{width:4px}
-#chat-msgs::-webkit-scrollbar-thumb{background:#4338ca55;border-radius:2px}
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blindfold Tower</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #0d0d0f; color: #e8e8ec;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+    }
+    #game-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+    #game-container canvas { display: block; margin: 0 auto; }
 
-/* FIX: room code input — uppercase visual hint */
-#code-input{text-transform:uppercase;letter-spacing:4px;font-family:monospace;font-size:1.1rem}
-</style>
+    /* Chat panel */
+    #chat-panel {
+      position: fixed; right: 0; top: 0; width: 280px; height: 100%;
+      background: rgba(13,13,15,0.88); border-left: 1px solid rgba(255,255,255,0.07);
+      display: flex; flex-direction: column; z-index: 100; backdrop-filter: blur(8px);
+    }
+    #chat-header {
+      padding: 12px 14px; font-size: 11px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: rgba(255,255,255,0.35); border-bottom: 1px solid rgba(255,255,255,0.07); flex-shrink: 0;
+    }
+    #chat-messages {
+      flex: 1; overflow-y: auto; padding: 8px 12px;
+      display: flex; flex-direction: column; gap: 6px;
+      scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent;
+    }
+    .chat-msg { font-size: 12.5px; line-height: 1.4; word-break: break-word; }
+    .chat-msg .sender { font-weight: 600; color: #7c9cf8; margin-right: 4px; }
+    .chat-msg.system .sender { color: #f8c77c; }
+    .chat-msg .text { color: #cdd0de; }
+    #chat-input-row {
+      padding: 8px 10px; border-top: 1px solid rgba(255,255,255,0.07);
+      flex-shrink: 0; display: flex; gap: 6px;
+    }
+    #chat-input {
+      flex: 1; background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10); border-radius: 6px;
+      color: #e8e8ec; font-size: 13px; padding: 6px 10px; outline: none;
+    }
+    #chat-input:focus { border-color: rgba(124,156,248,0.5); }
+    #chat-send {
+      background: #7c9cf8; border: none; border-radius: 6px;
+      color: #0d0d0f; font-size: 13px; font-weight: 600; padding: 6px 10px; cursor: pointer;
+    }
+    #chat-send:hover { background: #9db4fa; }
+
+    /* Blind overlay */
+    #blind-overlay {
+      position: fixed; inset: 0; right: 280px; background: #000; z-index: 200;
+      display: none; flex-direction: column; align-items: center; justify-content: center; gap: 24px; color: #fff;
+    }
+    #blind-overlay.active { display: flex; }
+    #blind-hud { text-align: center; }
+    #blind-hud h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #f8c77c; }
+    #blind-hud .position-display { font-size: 48px; font-weight: 800; font-variant-numeric: tabular-nums; color: #fff; margin: 8px 0; }
+    #blind-hud .size-display { font-size: 18px; color: #aaa; margin-bottom: 16px; }
+    #blind-controls { display: grid; grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(3, 64px); gap: 8px; }
+    .ctrl-btn {
+      background: rgba(255,255,255,0.10); border: 1.5px solid rgba(255,255,255,0.18);
+      border-radius: 10px; color: #fff; font-size: 22px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.1s; user-select: none;
+    }
+    .ctrl-btn:active { background: rgba(255,255,255,0.25); }
+    .ctrl-btn.drop-btn {
+      grid-column: 1 / -1; height: 52px;
+      background: rgba(248,100,100,0.2); border-color: rgba(248,100,100,0.5);
+      font-size: 16px; font-weight: 700; letter-spacing: 0.05em;
+    }
+    .ctrl-btn.drop-btn:active { background: rgba(248,100,100,0.45); }
+
+    /* Lobby */
+    #lobby-overlay {
+      position: fixed; inset: 0; right: 280px; background: #0d0d0f;
+      z-index: 150; display: flex; align-items: center; justify-content: center;
+    }
+    #lobby-overlay.hidden { display: none; }
+    #lobby-card {
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px; padding: 36px 40px; width: 360px; display: flex; flex-direction: column; gap: 16px;
+    }
+    #lobby-card h1 {
+      font-size: 26px; font-weight: 800;
+      background: linear-gradient(135deg, #7c9cf8, #f8c77c);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 4px;
+    }
+    .lobby-input {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px; color: #e8e8ec; font-size: 14px; padding: 10px 14px; outline: none; width: 100%;
+    }
+    .lobby-input:focus { border-color: rgba(124,156,248,0.6); }
+    .lobby-btn {
+      background: #7c9cf8; border: none; border-radius: 8px; color: #0d0d0f;
+      font-size: 14px; font-weight: 700; padding: 11px; cursor: pointer; width: 100%;
+    }
+    .lobby-btn:hover { background: #9db4fa; }
+    .lobby-btn.secondary { background: rgba(255,255,255,0.07); color: #cdd0de; }
+    .lobby-btn.secondary:hover { background: rgba(255,255,255,0.12); }
+    #room-code-display {
+      font-size: 36px; font-weight: 900; letter-spacing: 0.18em;
+      text-align: center; color: #f8c77c; font-variant-numeric: tabular-nums;
+    }
+    #player-list { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.8; min-height: 32px; }
+    #player-list span { color: #e8e8ec; }
+    #lobby-status { font-size: 13px; color: rgba(255,255,255,0.4); text-align: center; }
+
+    /* Game HUD */
+    #game-hud {
+      position: fixed; top: 0; left: 0; right: 280px; height: 48px;
+      display: flex; align-items: center; padding: 0 16px; gap: 20px;
+      background: rgba(13,13,15,0.7); backdrop-filter: blur(6px);
+      border-bottom: 1px solid rgba(255,255,255,0.06); z-index: 90; font-size: 13px; color: rgba(255,255,255,0.55);
+    }
+    .hud-pill { background: rgba(255,255,255,0.06); border-radius: 20px; padding: 3px 12px; font-weight: 600; color: #e8e8ec; }
+    .hud-pill.blind { background: rgba(248,199,124,0.15); color: #f8c77c; }
+    #end-game-btn {
+      margin-left: auto; background: rgba(248,100,100,0.12); border: 1px solid rgba(248,100,100,0.25);
+      border-radius: 6px; color: rgba(248,100,100,0.8); font-size: 12px; font-weight: 600;
+      padding: 4px 10px; cursor: pointer; display: none;
+    }
+    #end-game-btn:hover { background: rgba(248,100,100,0.2); }
+
+    /* Score flash */
+    #score-flash {
+      position: fixed; inset: 0; right: 280px;
+      display: none; align-items: center; justify-content: center; flex-direction: column; gap: 8px;
+      z-index: 180; pointer-events: none;
+    }
+    #score-flash.active { display: flex; }
+    #score-flash .round-label { font-size: 14px; color: rgba(255,255,255,0.45); letter-spacing: 0.08em; text-transform: uppercase; }
+    #score-flash .score-val {
+      font-size: 72px; font-weight: 900; color: #f8c77c;
+      text-shadow: 0 0 40px rgba(248,199,124,0.6);
+      animation: scorePop 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+    #score-flash .score-label { font-size: 16px; color: rgba(255,255,255,0.55); }
+    @keyframes scorePop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    /* Scoreboard */
+    #scoreboard {
+      position: fixed; top: 52px; left: 12px;
+      background: rgba(13,13,15,0.75); border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px; padding: 10px 14px; min-width: 150px;
+      z-index: 89; font-size: 12px; backdrop-filter: blur(6px); display: none;
+    }
+    #scoreboard .sb-title { font-weight: 700; color: rgba(255,255,255,0.4); letter-spacing: 0.07em; text-transform: uppercase; font-size: 10px; margin-bottom: 6px; }
+    .sb-row { display: flex; justify-content: space-between; gap: 16px; padding: 2px 0; color: #cdd0de; }
+    .sb-row .sb-name { font-weight: 600; }
+    .sb-row .sb-pts { color: #f8c77c; font-variant-numeric: tabular-nums; }
+  </style>
 </head>
 <body>
 
-<div id="landing" class="screen">
-  <h1>🗼 Blindfold Tower</h1>
-  <p style="color:#64748b;font-size:.95rem;margin-bottom:4px">Stack blocks guided only by voice — one player blindfolded each round</p>
-  <div class="card">
-    <input id="name-input" type="text" placeholder="Your name" maxlength="20" autocomplete="off"/>
-    <button id="create-btn" class="btn btn-primary">Create Room</button>
-    <div style="display:flex;align-items:center;gap:8px;color:#475569;font-size:.85rem">
-      <div style="flex:1;height:1px;background:#4338ca44"></div> or <div style="flex:1;height:1px;background:#4338ca44"></div>
-    </div>
-    <div class="row">
-      <!--
-        FIX v1.2: maxlength changed from 8 → 6 to match server room code length.
-        Colyseus default is nanoid(9) mixed-case — we override to 6-char uppercase.
-        Input is auto-uppercased via CSS text-transform and JS .toUpperCase() on submit.
-      -->
-      <input id="code-input" type="text" placeholder="Room code" maxlength="6" autocomplete="off" style="flex:1"/>
-      <button id="join-btn" class="btn btn-secondary">Join</button>
-    </div>
-    <p id="landing-err" style="color:#f87171;font-size:.82rem;min-height:1.2em;text-align:center"></p>
-  </div>
-  <p class="hint">Use Zoom/Meet for voice — this handles the game</p>
+<div id="game-container"></div>
+
+<div id="game-hud">
+  <span>Round <span id="hud-round" class="hud-pill">—</span></span>
+  <span>Blind: <span id="hud-blind" class="hud-pill blind">—</span></span>
+  <span id="hud-phase" style="color:rgba(255,255,255,0.3)"></span>
+  <button id="end-game-btn">End Game</button>
 </div>
 
-<div id="lobby" class="screen hidden">
-  <div class="lobby-box">
-    <h3>Room Code</h3>
-    <!-- Room code is now always 6 uppercase letters, easy to read over Zoom -->
-    <div class="room-code" id="room-code">??????</div>
-    <p class="hint" style="margin-top:8px">Say this code to teammates</p>
-  </div>
-  <div class="lobby-box" style="flex:1;max-width:340px">
-    <h3>Players</h3>
-    <ul id="player-list"></ul>
-    <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px">
-      <button id="ready-btn" class="btn btn-secondary">I'm Ready ✓</button>
-      <button id="start-btn" class="btn btn-primary" style="display:none">Start Game 🚀</button>
-      <button id="lobby-leave-btn" class="btn btn-danger" style="font-size:.82rem;padding:7px">Leave Room</button>
-    </div>
-    <p id="lobby-hint" class="hint" style="margin-top:10px">Need at least 2 players to start</p>
-  </div>
+<div id="scoreboard">
+  <div class="sb-title">Scores</div>
+  <div id="sb-rows"></div>
 </div>
 
-<div id="game" class="screen hidden">
-  <div id="canvas-wrap">
-    <div id="timer-bar-wrap"><div id="timer-bar" style="width:100%"></div></div>
-    <div id="role-badge" class="sighted">👁 Sighted</div>
-    <div id="blind-overlay" class="hidden">
-      <div id="blind-title">🙈 You are BLINDFOLDED</div>
-      <div id="blind-guidance">Waiting for guidance from your team…</div>
-      <div id="blind-controls">
-        <!-- Change 3: number inputs removed — X is server-randomised on spawn -->
-        <button id="spawn-btn" class="btn btn-primary" style="width:100%;padding:14px;font-size:1.05rem">Spawn block</button>
-        <div class="blind-row">
-          <button class="btn btn-secondary" id="move-left" style="flex:1">◀ Left</button>
-          <button class="btn btn-secondary" id="move-right" style="flex:1">Right ▶</button>
-          <button class="btn btn-primary" id="drop-btn" style="flex:1">⬇ Drop!</button>
-        </div>
-        <div class="key-hint">S = spawn  |  A / ← = move left  |  D / → = move right  |  Space = drop</div>
-      </div>
+<div id="lobby-overlay">
+  <div id="lobby-card">
+    <h1>🏗 Blindfold Tower</h1>
+
+    <div id="step-name">
+      <p style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:12px">
+        One player is blindfolded. Your team guides them by voice (Zoom/Meet) to stack blocks as high as possible.
+      </p>
+      <input id="name-input" class="lobby-input" placeholder="Your display name" maxlength="20" />
+      <div style="height:10px"></div>
+      <button class="lobby-btn" id="name-next-btn">Continue →</button>
     </div>
-    <div id="overlay" class="hidden">
-      <div id="overlay-title"></div>
-      <div id="overlay-body"></div>
-      <ul id="overlay-scores"></ul>
-      <button id="overlay-btn" class="btn btn-primary" style="display:none">Back to Lobby</button>
+
+    <div id="step-mode" style="display:none;flex-direction:column;gap:12px">
+      <button class="lobby-btn" id="create-btn">Create Room</button>
+      <button class="lobby-btn secondary" id="join-mode-btn">Join with Code</button>
     </div>
-  </div>
-  <div id="side-panel">
-    <div id="hud-panel">
-      <div class="hud-row"><span>Round</span><span class="hud-val" id="hud-round">1 / 3</span></div>
-      <div class="hud-row"><span>Height</span><span class="hud-val" id="hud-height">0 px</span></div>
-      <div class="hud-row"><span>Blind</span><span class="hud-val" id="hud-blind">—</span></div>
+
+    <div id="step-join" style="display:none;flex-direction:column;gap:12px">
+      <input id="code-input" class="lobby-input" placeholder="Room code" maxlength="4"
+        style="text-transform:uppercase;letter-spacing:0.15em;font-size:18px;text-align:center" />
+      <button class="lobby-btn" id="join-btn">Join →</button>
+      <button class="lobby-btn secondary" id="back-btn">← Back</button>
     </div>
-    <div id="score-panel">
-      <h3>Scores</h3>
-      <ul id="score-list"></ul>
+
+    <div id="step-lobby" style="display:none;flex-direction:column;gap:14px">
+      <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.3);letter-spacing:0.08em;text-transform:uppercase">Room Code</div>
+      <div id="room-code-display">——</div>
+      <div id="player-list">Waiting for players…</div>
+      <div id="lobby-status">Waiting for host to start…</div>
+      <button class="lobby-btn" id="start-btn" style="display:none">Start Game ▶</button>
     </div>
-    <div id="guidance-row">
-      <input id="guidance-input" type="text" placeholder="Guide the blind player…" maxlength="200" autocomplete="off"/>
-      <button id="guidance-send" class="btn btn-secondary">Send</button>
-    </div>
-    <div id="chat-area">
-      <div id="chat-msgs"></div>
-      <div id="chat-input-row">
-        <input id="chat-input" type="text" placeholder="Chat…" maxlength="200" autocomplete="off"/>
-        <button id="chat-send" class="btn btn-secondary">↵</button>
-      </div>
-    </div>
+
+    <div id="lobby-error" style="font-size:13px;color:#f87c7c;min-height:18px;text-align:center"></div>
   </div>
 </div>
 
-<script>
-"use strict";
+<div id="blind-overlay">
+  <div id="blind-hud">
+    <h2>🙈 You are BLINDFOLDED</h2>
+    <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:16px">Listen to your team. Move the block, then DROP!</div>
+    <div class="position-display" id="blind-pos-display">X: 0</div>
+    <div class="size-display" id="blind-size-display">Size: Medium (2×1)</div>
+  </div>
+  <div id="blind-controls">
+    <div></div>
+    <button class="ctrl-btn" id="btn-size-up" title="Size Up (W)">▲</button>
+    <div></div>
+    <button class="ctrl-btn" id="btn-left" title="Left (A/←)">◀</button>
+    <div style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:10px">MOVE</div>
+    <button class="ctrl-btn" id="btn-right" title="Right (D/→)">▶</button>
+    <div></div>
+    <button class="ctrl-btn" id="btn-size-down" title="Size Down (S)">▼</button>
+    <div></div>
+    <button class="ctrl-btn drop-btn" id="btn-drop" title="Drop (Space)">DROP ⬇</button>
+  </div>
+</div>
 
-// ── Extension error suppressor ───────────────────────────────
-// Chrome browser extensions (Grammarly, LastPass, MetaMask, Zoom extension,
-// password managers, etc.) register chrome.runtime.onMessage listeners that
-// return true (signalling async response). When our WebSocket opens or a page
-// visibility event fires, Chrome closes the extension message channel before
-// the handler resolves and emits:
-//
-//   "Uncaught (in promise) Error: A listener indicated an asynchronous
-//    response by returning true, but the message channel closed before
-//    a response was received"
-//
-// This error:
-//   - Originates in chrome.runtime (extension <-> extension IPC only)
-//   - Does NOT touch window.WebSocket, Colyseus, or any game state
-//   - Does NOT reject room.create() or room.join()
-//   - Is console-only, zero UI or gameplay impact
-//   - Disappears in Chrome Incognito (extensions disabled) — confirms origin
-//
-// Fix: intercept at unhandledrejection boundary, fingerprint by the exact
-// Chrome-internal message string, suppress it, and let real errors through.
-window.addEventListener("unhandledrejection", (event) => {
-  const msg = event?.reason?.message ?? "";
-  if (msg.includes("message channel closed before a response was received")) {
-    event.preventDefault(); // suppress — extension internal noise
-    return;
-  }
-  // Real game error — make it visible so developers notice it
-  console.error("[Blindfold Tower] Unhandled rejection:", event.reason);
-});
+<div id="score-flash">
+  <div class="round-label" id="flash-round">Round 1</div>
+  <div class="score-val" id="flash-score">0</div>
+  <div class="score-label">tower height points</div>
+</div>
 
-// ── Global error boundary ────────────────────────────────────
-// Catches synchronous throws escaping try/catch. Ignores cross-origin
-// CDN script errors (no stack available from pixi/colyseus CDN).
-window.addEventListener("error", (event) => {
-  if (!event.filename || event.filename === "") return;
-  console.error("[Blindfold Tower] Uncaught error:", event.message, event.filename + ":" + event.lineno);
-});
+<div id="chat-panel">
+  <div id="chat-header">Team Chat</div>
+  <div id="chat-messages"></div>
+  <div id="chat-input-row">
+    <input id="chat-input" placeholder="Message…" maxlength="200" autocomplete="off" />
+    <button id="chat-send">↑</button>
+  </div>
+</div>
 
-const WS_PROTO  = location.protocol==="https:"?"wss":"ws";
-const SERVER_URL= window.ENV_SERVER_URL||`${WS_PROTO}://${location.host}`;
-const CANVAS_W=800, CANVAS_H=580, FLOOR_Y=550;
-
-let client,room,myName="",isBlind=false,hasPending=false;
-let pendingX=400,pendingW=60,pendingH=30;
-let blindHasPending=false,blindPendingX=400,blindPendingW=60,blindPendingH=30;
-let pixiApp,blockSprites={},pendingSprite=null,interpBuffers={};
-
-const $=id=>document.getElementById(id);
-
-function showScreen(id){
-  ["landing","lobby","game"].forEach(s=>$(s).classList.toggle("hidden",s!==id));
-}
-
-function initPixi(){
-  if(pixiApp) return;
-  pixiApp=new PIXI.Application({width:CANVAS_W,height:CANVAS_H,backgroundColor:0x0d0d1a,antialias:true,resolution:Math.min(window.devicePixelRatio||1,2),autoDensity:true});
-  $("canvas-wrap").insertBefore(pixiApp.view,$("timer-bar-wrap"));
-  const floor=new PIXI.Graphics();
-  floor.beginFill(0x334155); floor.drawRect(0,FLOOR_Y,CANVAS_W,CANVAS_H-FLOOR_Y); floor.endFill();
-  pixiApp.stage.addChild(floor);
-  for(let y=FLOOR_Y-50;y>20;y-=50){
-    const h=FLOOR_Y-y;
-    const mark=new PIXI.Graphics(); mark.lineStyle(1,0x1e3a5f,0.6); mark.moveTo(0,y).lineTo(CANVAS_W,y);
-    pixiApp.stage.addChild(mark);
-    const lbl=new PIXI.Text(`${h}px`,{fill:0x1e3a5f,fontSize:9,fontFamily:"monospace"});
-    lbl.x=4; lbl.y=y-10; pixiApp.stage.addChild(lbl);
-  }
-  pendingSprite=new PIXI.Graphics(); pixiApp.stage.addChild(pendingSprite);
-  // Position label above pending block — visible to all players so teammates
-  // can call out "you are at 340" without guessing
-  window._pendingLabel = new PIXI.Text("", {fill:0xfbbf24, fontSize:12, fontFamily:"monospace", fontWeight:"bold"});
-  window._pendingLabel.anchor.set(0.5,1);
-  pixiApp.stage.addChild(window._pendingLabel);
-  pixiApp.ticker.add(()=>renderLoop());
-}
-
-function renderLoop(){
-  const now=Date.now();
-  if(!room) return;
-  const blockIds=new Set();
-  room.state.blocks.forEach((bs,id)=>{
-    blockIds.add(id);
-    if(!interpBuffers[id]) interpBuffers[id]=[];
-    const buf=interpBuffers[id];
-    const last=buf[buf.length-1];
-    if(!last||last.x!==bs.x||last.y!==bs.y) { buf.push({x:bs.x,y:bs.y,angle:bs.angle,ts:now}); if(buf.length>3) buf.shift(); }
-    let rx=bs.x,ry=bs.y,ra=bs.angle;
-    if(buf.length>=2){
-      const a=buf[buf.length-2],b=buf[buf.length-1];
-      const dt=b.ts-a.ts||33, t=Math.min(1,(now-b.ts+dt)/dt);
-      rx=a.x+(b.x-a.x)*t; ry=a.y+(b.y-a.y)*t; ra=a.angle+(b.angle-a.angle)*t;
-    }
-    if(!blockSprites[id]){const g=new PIXI.Graphics();pixiApp.stage.addChild(g);blockSprites[id]=g;}
-    const g=blockSprites[id]; g.clear();
-    const settled=bs.settled,mine=bs.ownerId===(room&&room.sessionId);
-    const fill=settled?(mine?0x7c3aed:0x4338ca):(mine?0x22d3ee:0x0ea5e9);
-    const stroke=settled?(mine?0xa78bfa:0x6366f1):0x38bdf8;
-    g.lineStyle(1.5,stroke,0.9); g.beginFill(fill,settled?0.85:0.7);
-    g.drawRoundedRect(-bs.w/2,-bs.h/2,bs.w,bs.h,4); g.endFill();
-    g.position.set(rx,ry); g.rotation=ra;
-  });
-  for(const id of Object.keys(blockSprites)){
-    if(!blockIds.has(id)){pixiApp.stage.removeChild(blockSprites[id]);delete blockSprites[id];delete interpBuffers[id];}
-  }
-  pendingSprite.clear();
-  // Change 2: visible to ALL players (not just blind)
-  if(blindHasPending){
-    pendingSprite.lineStyle(2,0xfbbf24,0.9); pendingSprite.beginFill(0xfbbf24,0.25);
-    pendingSprite.drawRoundedRect(-blindPendingW/2,-blindPendingH/2,blindPendingW,blindPendingH,4); pendingSprite.endFill();
-    pendingSprite.position.set(blindPendingX,30);
-    pendingSprite.lineStyle(1,0xfbbf24,0.4); pendingSprite.moveTo(0,blindPendingH/2); pendingSprite.lineTo(0,FLOOR_Y-30);
-    if(window._pendingLabel){
-      window._pendingLabel.text="x:"+Math.round(blindPendingX);
-      window._pendingLabel.position.set(blindPendingX,14);
-      window._pendingLabel.visible=true;
-    }
-  } else {
-    if(window._pendingLabel) window._pendingLabel.visible=false;
-  }
-}
-
-function initClient(){ client=new Colyseus.Client(SERVER_URL); }
-
-async function createRoom(){
-  try{ room=await client.create("tower",{name:myName}); onRoomJoined(); }
-  catch(e){ $("landing-err").textContent="Failed to create room: "+e.message; }
-}
-
-async function joinRoom(code){
-  try{
-    // FIX: normalise to uppercase before sending — input CSS shows uppercase
-    // visually but the value property is whatever the user typed
-    room=await client.joinById(code.toUpperCase(),{name:myName});
-    onRoomJoined();
-  } catch(e){ $("landing-err").textContent="Could not join: "+(e.message||"room not found"); }
-}
-
-function onRoomJoined(){
-  $("room-code").textContent=room.id;  // room.id is now always 6 uppercase chars
-  showScreen("lobby");
-  bindRoomEvents();
-}
-
-function bindRoomEvents(){
-  room.state.listen("phase",(phase)=>{
-    $("overlay").classList.add("hidden");
-    if(phase==="lobby") showScreen("lobby");
-    else if(phase==="playing"){ showScreen("game"); initPixi(); updateBlindUI(); }
-    else if(phase==="roundEnd") showRoundEnd();
-    else if(phase==="end") showGameEnd();
-  });
-  room.state.listen("timerMs",(ms)=>{
-    const pct=room.state.timerMs?(ms/(90*1000))*100:0;
-    const bar=$("timer-bar");
-    bar.style.width=pct+"%"; bar.style.background=pct<20?"#dc2626":"#7c3aed";
-  });
-  room.state.listen("round",r=>{$("hud-round").textContent=`${r} / ${room.state.roundMax}`;});
-  room.state.listen("stableHeight",h=>{$("hud-height").textContent=`${h} px`;});
-  room.state.listen("blindId",id=>{
-    const bp=room.state.players.get(id);
-    $("hud-blind").textContent=bp?bp.name:"—";
-    updateBlindUI();
-  });
-  room.state.listen("lastGuidance",text=>{
-    $("blind-guidance").textContent=text||"Waiting for guidance from your team…";
-  });
-  room.state.players.onAdd((p,sessionId)=>{
-    p.listen("isReady",()=>renderLobby());
-    p.listen("isHost",()=>renderLobby());
-    p.listen("score",()=>renderScores());
-    p.listen("isBlind",()=>{
-      if(sessionId===room.sessionId){isBlind=p.isBlind;updateBlindUI();}
-      if(!p.isBlind) blindHasPending=false;
-      renderScores();
-    });
-    p.listen("hasPending",()=>{
-      if(sessionId===room.sessionId) hasPending=p.hasPending;
-      if(p.isBlind) blindHasPending=p.hasPending;
-    });
-    p.listen("pendingX",()=>{
-      if(sessionId===room.sessionId) pendingX=p.pendingX;
-      if(p.isBlind) blindPendingX=p.pendingX;
-    });
-    p.listen("pendingW",()=>{
-      if(sessionId===room.sessionId) pendingW=p.pendingW;
-      if(p.isBlind) blindPendingW=p.pendingW;
-    });
-    p.listen("pendingH",()=>{
-      if(sessionId===room.sessionId) pendingH=p.pendingH;
-      if(p.isBlind) blindPendingH=p.pendingH;
-    });
-    renderLobby(); renderScores(); sysMsg(`${p.name} joined`);
-  });
-  room.state.players.onRemove((p)=>{ renderLobby(); renderScores(); sysMsg(`${p.name} left`); });
-  room.state.chat.onAdd((msg)=>{ appendChat(msg.from,msg.text,false); });
-  room.onLeave(()=>sysMsg("Disconnected — attempting reconnect…"));
-  room.onError((code,msg)=>sysMsg(`Error ${code}: ${msg}`));
-}
-
-function renderLobby(){
-  const list=$("player-list"); list.innerHTML="";
-  room.state.players.forEach((p)=>{
-    const li=document.createElement("li");
-    const badges=[];
-    if(p.isHost)  badges.push(`<span class="badge badge-host">HOST</span>`);
-    if(p.isReady) badges.push(`<span class="badge badge-ready">READY</span>`);
-    li.innerHTML=`<span>${escHtml(p.name)}</span><span>${badges.join(" ")}</span>`;
-    list.appendChild(li);
-  });
-  const iAmHost=room.state.players.get(room.sessionId)?.isHost;
-  $("start-btn").style.display=iAmHost&&room.state.players.size>=2?"":"none";
-  $("lobby-hint").style.display=room.state.players.size<2?"":"none";
-}
-
-function renderScores(){
-  if(!room) return;
-  const list=$("score-list"); list.innerHTML="";
-  const sorted=[...room.state.players.values()].sort((a,b)=>b.score-a.score);
-  sorted.forEach(p=>{
-    const li=document.createElement("li");
-    li.className=p.isBlind?"is-blind":"";
-    li.innerHTML=`<span>${escHtml(p.name)}${p.isBlind?" 🙈":""}</span><span class="hud-val">${p.score}</span>`;
-    list.appendChild(li);
-  });
-}
-
-function updateBlindUI(){
-  const overlay=$("blind-overlay"), badge=$("role-badge"), guidance=$("guidance-row");
-  if(isBlind){
-    overlay.classList.remove("hidden");
-    badge.className="blind"; badge.textContent="🙈 Blindfolded";
-    guidance.style.display="none";
-  } else {
-    overlay.classList.add("hidden");
-    badge.className="sighted"; badge.textContent="👁 Sighted";
-    guidance.style.display="";
-  }
-}
-
-
-function showRoundEnd(){
-  $("overlay-title").textContent=`Round ${room.state.round} Over!`;
-  $("overlay-body").textContent=`Tower reached ${room.state.stableHeight}px. Next round in 4 seconds…`;
-  buildOverlayScores(false);
-  $("overlay-btn").style.display="none"; $("overlay").classList.remove("hidden");
-}
-function showGameEnd(){
-  $("overlay-title").textContent="🏆 Game Over!";
-  $("overlay-body").textContent="Final Scores:";
-  buildOverlayScores(true);
-  $("overlay-btn").style.display=""; $("overlay").classList.remove("hidden");
-}
-function buildOverlayScores(markWinner){
-  const ul=$("overlay-scores"); ul.innerHTML="";
-  const sorted=[...room.state.players.values()].sort((a,b)=>b.score-a.score);
-  const max=sorted[0]?.score??0;
-  sorted.forEach(p=>{
-    const li=document.createElement("li");
-    if(markWinner&&p.score===max) li.className="winner-row";
-    li.innerHTML=`<span>${escHtml(p.name)}</span><span>${p.score} px</span>`;
-    ul.appendChild(li);
-  });
-}
-
-function appendChat(from,text,isSystem){
-  const msgs=$("chat-msgs");
-  const div=document.createElement("div"); div.className="chat-msg";
-  if(isSystem) div.innerHTML=`<span class="chat-sys">${escHtml(text)}</span>`;
-  else div.innerHTML=`<span class="chat-from">${escHtml(from)}:</span> ${escHtml(text)}`;
-  msgs.appendChild(div); msgs.scrollTop=msgs.scrollHeight;
-}
-function sysMsg(text){ appendChat("",text,true); }
-function escHtml(str){ return String(str||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
-
-function sendSpawn(){
-  // Change 3: no position data sent — server generates random X, W, H
-  // hasPending guard here matches server guard (double-tap = no-op)
-  if(!room||!isBlind||hasPending) return;
-  room.send("spawn_block",{});
-}
-function sendMove(dir){ if(!room||!isBlind||!hasPending) return; room.send("move_block",{dx:dir*20}); }
-function sendDrop(){ if(!room||!isBlind||!hasPending) return; room.send("drop_block"); }
-function sendChat(){ const input=$("chat-input"),text=input.value.trim(); if(!text||!room) return; room.send("chat",{text}); input.value=""; }
-function sendGuidance(){ const input=$("guidance-input"),text=input.value.trim(); if(!text||!room) return; room.send("guidance",{text}); appendChat("→ You",text,true); input.value=""; }
-
-document.addEventListener("keydown",(e)=>{
-  if(["INPUT","TEXTAREA"].includes(document.activeElement.tagName)) return;
-  if(room?.state.phase!=="playing") return;
-  if(e.code==="KeyA"||e.code==="ArrowLeft"){ sendMove(-1); e.preventDefault(); }
-  if(e.code==="KeyD"||e.code==="ArrowRight"){ sendMove(+1); e.preventDefault(); }
-  if(e.code==="Space"){ sendDrop(); e.preventDefault(); }
-  if(e.code==="KeyS"){ sendSpawn(); e.preventDefault(); }
-});
-
-window.addEventListener("DOMContentLoaded",()=>{
-  initClient();
-  $("create-btn").onclick=()=>{ myName=$("name-input").value.trim()||"Player"; createRoom(); };
-  $("join-btn").onclick=()=>{
-    myName=$("name-input").value.trim()||"Player";
-    const code=$("code-input").value.trim();
-    if(!code){ $("landing-err").textContent="Enter a room code"; return; }
-    if(code.length!==6){ $("landing-err").textContent="Room code is exactly 6 letters"; return; }
-    joinRoom(code);
-  };
-  $("name-input").addEventListener("keydown",e=>{ if(e.key==="Enter") $("create-btn").click(); });
-  $("code-input").addEventListener("keydown",e=>{ if(e.key==="Enter") $("join-btn").click(); });
-  $("code-input").addEventListener("input",e=>{ e.target.value=e.target.value.toUpperCase(); });
-  $("ready-btn").onclick=()=>room&&room.send("ready");
-  $("start-btn").onclick=()=>room&&room.send("host_start");
-  $("lobby-leave-btn").onclick=()=>{ room&&room.leave(); showScreen("landing"); };
-  $("spawn-btn").onclick=sendSpawn;
-  $("move-left").onclick=()=>sendMove(-1);
-  $("move-right").onclick=()=>sendMove(+1);
-  $("drop-btn").onclick=sendDrop;
-  $("chat-send").onclick=sendChat;
-  $("guidance-send").onclick=sendGuidance;
-  $("overlay-btn").onclick=()=>{ room&&room.leave(); showScreen("landing"); $("overlay").classList.add("hidden"); };
-  $("chat-input").addEventListener("keydown",e=>{ if(e.key==="Enter") sendChat(); });
-  $("guidance-input").addEventListener("keydown",e=>{ if(e.key==="Enter") sendGuidance(); });
-});
-</script>
+<script type="module" src="/main.ts"></script>
 </body>
 </html>
-

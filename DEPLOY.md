@@ -7,6 +7,7 @@
 | v1.1 | Schema fix: `@colyseus/schema` v2 requires `defineTypes()` + constructor `new MapSchema()` — old `type()` decorator left collections `undefined`, causing `.size` crash on first join |
 | v1.2 | Room code fix: Colyseus default `nanoid(9)` mixed-case IDs truncated by `maxlength="8"` on client input. Replaced with 6-char uppercase-only custom generator. Client normalises to uppercase. |
 | v1.3 | Extension error suppressor: Chrome extensions emit false `"message channel closed"` errors into the console. Added `unhandledrejection` filter that suppresses extension noise while surfacing real game errors. `simulate.js` added: 113 headless integration tests, 0 failures. |
+| v1.4 | Spawn mechanic overhauled: block spawns at a server-random X/W/H per drop. Pending block ghost now visible on canvas to all players with a live `x:NNN` position label. Blind player UI simplified to Spawn / Move Left / Move Right / Drop — number inputs removed. |
 
 ---
 

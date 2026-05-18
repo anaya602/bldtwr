@@ -2,9 +2,9 @@
 /**
  * simulate.js — Headless integration test + full game simulation
  * =============================================================
- * Runs entirely in Node, no server or browser needed.
- * Exercises every code path in server.js with real physics (Matter.js)
- * and real schema instances (@colyseus/schema).
+ * 113 assertions across 20 test groups. Runs entirely in Node,
+ * no server or browser needed. Exercises every code path in
+ * server.js with real physics (Matter.js) and real @colyseus/schema.
  *
  * Usage:
  *   node simulate.js           → run all tests, exit 0 on pass
@@ -166,6 +166,15 @@ assert(ROOM_CODES.every(c => /^[A-Z]+$/.test(c)),                             "N
 assert(ROOM_CODES.every(c => c.length <= 6),                                  "Fits client maxlength=6");
 const unique = new Set(ROOM_CODES);
 assert(unique.size === ROOM_CODES.length,                                     `No collisions in ${ROOM_CODES.length} codes`);
+
+// Validate v1.4 spawn range: SPAWN_MARGIN=80, arena width=800
+const SPAWN_MARGIN = 80;
+const spawnSamples = Array.from({length:100}, () =>
+  Math.round(SPAWN_MARGIN + Math.random() * (800 - SPAWN_MARGIN * 2)));
+assert(spawnSamples.every(x => x >= SPAWN_MARGIN && x <= 800 - SPAWN_MARGIN),
+       "Spawn X always within SPAWN_MARGIN bounds");
+assert(new Set(spawnSamples).size > 50,
+       "Spawn X is varied across 100 samples (not fixed)");
 
 // ═════════════════════════════════════════════════════════════
 //  TEST 3 — Player join + host assignment

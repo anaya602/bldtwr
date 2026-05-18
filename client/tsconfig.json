@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target":           "ES2020",
+    "module":           "ESNext",
+    "moduleResolution": "bundler",
+    "lib":              ["ES2020", "DOM"],
+    "strict":           true,
+    "esModuleInterop":  true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata":  true,
+    "skipLibCheck":     true,
+    "noEmit":           true,
+    "baseUrl":          ".",
+    "paths": {
+      "../../shared/*": ["../shared/*"],
+      "../server/*":    ["../server/*"]
+    }
+  },
+  "include": ["./**/*.ts", "../shared/**/*.ts", "../server/schema/**/*.ts"],
+  "exclude": ["node_modules"]
+}

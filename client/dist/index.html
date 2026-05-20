@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blindfold Tower</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      width: 100%; height: 100%;
+      background: #0d0d0f; color: #e8e8ec;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      overflow: hidden;
+    }
+    #game-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+    #game-container canvas { display: block; margin: 0 auto; }
+
+    /* Chat panel */
+    #chat-panel {
+      position: fixed; right: 0; top: 0; width: 280px; height: 100%;
+      background: rgba(13,13,15,0.88); border-left: 1px solid rgba(255,255,255,0.07);
+      display: flex; flex-direction: column; z-index: 100; backdrop-filter: blur(8px);
+    }
+    #chat-header {
+      padding: 12px 14px; font-size: 11px; font-weight: 600;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      color: rgba(255,255,255,0.35); border-bottom: 1px solid rgba(255,255,255,0.07); flex-shrink: 0;
+    }
+    #chat-messages {
+      flex: 1; overflow-y: auto; padding: 8px 12px;
+      display: flex; flex-direction: column; gap: 6px;
+      scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.12) transparent;
+    }
+    .chat-msg { font-size: 12.5px; line-height: 1.4; word-break: break-word; }
+    .chat-msg .sender { font-weight: 600; color: #7c9cf8; margin-right: 4px; }
+    .chat-msg.system .sender { color: #f8c77c; }
+    .chat-msg .text { color: #cdd0de; }
+    #chat-input-row {
+      padding: 8px 10px; border-top: 1px solid rgba(255,255,255,0.07);
+      flex-shrink: 0; display: flex; gap: 6px;
+    }
+    #chat-input {
+      flex: 1; background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10); border-radius: 6px;
+      color: #e8e8ec; font-size: 13px; padding: 6px 10px; outline: none;
+    }
+    #chat-input:focus { border-color: rgba(124,156,248,0.5); }
+    #chat-send {
+      background: #7c9cf8; border: none; border-radius: 6px;
+      color: #0d0d0f; font-size: 13px; font-weight: 600; padding: 6px 10px; cursor: pointer;
+    }
+    #chat-send:hover { background: #9db4fa; }
+
+    /* Blind overlay */
+    #blind-overlay {
+      position: fixed; inset: 0; right: 280px; background: #000; z-index: 200;
+      display: none; flex-direction: column; align-items: center; justify-content: center; gap: 24px; color: #fff;
+    }
+    #blind-overlay.active { display: flex; }
+    #blind-hud { text-align: center; }
+    #blind-hud h2 { font-size: 22px; font-weight: 700; margin-bottom: 8px; color: #f8c77c; }
+    #blind-hud .position-display { font-size: 48px; font-weight: 800; font-variant-numeric: tabular-nums; color: #fff; margin: 8px 0; }
+    #blind-hud .size-display { font-size: 18px; color: #aaa; margin-bottom: 16px; }
+    #blind-controls { display: grid; grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(3, 64px); gap: 8px; }
+    .ctrl-btn {
+      background: rgba(255,255,255,0.10); border: 1.5px solid rgba(255,255,255,0.18);
+      border-radius: 10px; color: #fff; font-size: 22px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.1s; user-select: none;
+    }
+    .ctrl-btn:active { background: rgba(255,255,255,0.25); }
+    .ctrl-btn.drop-btn {
+      grid-column: 1 / -1; height: 52px;
+      background: rgba(248,100,100,0.2); border-color: rgba(248,100,100,0.5);
+      font-size: 16px; font-weight: 700; letter-spacing: 0.05em;
+    }
+    .ctrl-btn.drop-btn:active { background: rgba(248,100,100,0.45); }
+
+    /* Lobby */
+    #lobby-overlay {
+      position: fixed; inset: 0; right: 280px; background: #0d0d0f;
+      z-index: 150; display: flex; align-items: center; justify-content: center;
+    }
+    #lobby-overlay.hidden { display: none; }
+    #lobby-card {
+      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px; padding: 36px 40px; width: 360px; display: flex; flex-direction: column; gap: 16px;
+    }
+    #lobby-card h1 {
+      font-size: 26px; font-weight: 800;
+      background: linear-gradient(135deg, #7c9cf8, #f8c77c);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 4px;
+    }
+    .lobby-input {
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px; color: #e8e8ec; font-size: 14px; padding: 10px 14px; outline: none; width: 100%;
+    }
+    .lobby-input:focus { border-color: rgba(124,156,248,0.6); }
+    .lobby-btn {
+      background: #7c9cf8; border: none; border-radius: 8px; color: #0d0d0f;
+      font-size: 14px; font-weight: 700; padding: 11px; cursor: pointer; width: 100%;
+    }
+    .lobby-btn:hover { background: #9db4fa; }
+    .lobby-btn.secondary { background: rgba(255,255,255,0.07); color: #cdd0de; }
+    .lobby-btn.secondary:hover { background: rgba(255,255,255,0.12); }
+    #room-code-display {
+      font-size: 36px; font-weight: 900; letter-spacing: 0.18em;
+      text-align: center; color: #f8c77c; font-variant-numeric: tabular-nums;
+    }
+    #player-list { font-size: 13px; color: rgba(255,255,255,0.5); line-height: 1.8; min-height: 32px; }
+    #player-list span { color: #e8e8ec; }
+    #lobby-status { font-size: 13px; color: rgba(255,255,255,0.4); text-align: center; }
+
+    /* Game HUD */
+    #game-hud {
+      position: fixed; top: 0; left: 0; right: 280px; height: 48px;
+      display: flex; align-items: center; padding: 0 16px; gap: 20px;
+      background: rgba(13,13,15,0.7); backdrop-filter: blur(6px);
+      border-bottom: 1px solid rgba(255,255,255,0.06); z-index: 90; font-size: 13px; color: rgba(255,255,255,0.55);
+    }
+    .hud-pill { background: rgba(255,255,255,0.06); border-radius: 20px; padding: 3px 12px; font-weight: 600; color: #e8e8ec; }
+    .hud-pill.blind { background: rgba(248,199,124,0.15); color: #f8c77c; }
+    #end-game-btn {
+      margin-left: auto; background: rgba(248,100,100,0.12); border: 1px solid rgba(248,100,100,0.25);
+      border-radius: 6px; color: rgba(248,100,100,0.8); font-size: 12px; font-weight: 600;
+      padding: 4px 10px; cursor: pointer; display: none;
+    }
+    #end-game-btn:hover { background: rgba(248,100,100,0.2); }
+
+    /* Score flash */
+    #score-flash {
+      position: fixed; inset: 0; right: 280px;
+      display: none; align-items: center; justify-content: center; flex-direction: column; gap: 8px;
+      z-index: 180; pointer-events: none;
+    }
+    #score-flash.active { display: flex; }
+    #score-flash .round-label { font-size: 14px; color: rgba(255,255,255,0.45); letter-spacing: 0.08em; text-transform: uppercase; }
+    #score-flash .score-val {
+      font-size: 72px; font-weight: 900; color: #f8c77c;
+      text-shadow: 0 0 40px rgba(248,199,124,0.6);
+      animation: scorePop 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+    #score-flash .score-label { font-size: 16px; color: rgba(255,255,255,0.55); }
+    @keyframes scorePop { from { transform: scale(0.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+    /* Scoreboard */
+    #scoreboard {
+      position: fixed; top: 52px; left: 12px;
+      background: rgba(13,13,15,0.75); border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 10px; padding: 10px 14px; min-width: 150px;
+      z-index: 89; font-size: 12px; backdrop-filter: blur(6px); display: none;
+    }
+    #scoreboard .sb-title { font-weight: 700; color: rgba(255,255,255,0.4); letter-spacing: 0.07em; text-transform: uppercase; font-size: 10px; margin-bottom: 6px; }
+    .sb-row { display: flex; justify-content: space-between; gap: 16px; padding: 2px 0; color: #cdd0de; }
+    .sb-row .sb-name { font-weight: 600; }
+    .sb-row .sb-pts { color: #f8c77c; font-variant-numeric: tabular-nums; }
+  </style>
+  <script type="module" crossorigin src="./assets/index-CGFHwKyq.js"></script>
+</head>
+<body>
+
+<div id="game-container"></div>
+
+<div id="game-hud">
+  <span>Round <span id="hud-round" class="hud-pill">—</span></span>
+  <span>Blind: <span id="hud-blind" class="hud-pill blind">—</span></span>
+  <span id="hud-phase" style="color:rgba(255,255,255,0.3)"></span>
+  <button id="end-game-btn">End Game</button>
+</div>
+
+<div id="scoreboard">
+  <div class="sb-title">Scores</div>
+  <div id="sb-rows"></div>
+</div>
+
+<div id="lobby-overlay">
+  <div id="lobby-card">
+    <h1>🏗 Blindfold Tower</h1>
+
+    <div id="step-name">
+      <p style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:12px">
+        One player is blindfolded. Your team guides them by voice (Zoom/Meet) to stack blocks as high as possible.
+      </p>
+      <input id="name-input" class="lobby-input" placeholder="Your display name" maxlength="20" />
+      <div style="height:10px"></div>
+      <button class="lobby-btn" id="name-next-btn">Continue →</button>
+    </div>
+
+    <div id="step-mode" style="display:none;flex-direction:column;gap:12px">
+      <button class="lobby-btn" id="create-btn">Create Room</button>
+      <button class="lobby-btn secondary" id="join-mode-btn">Join with Code</button>
+    </div>
+
+    <div id="step-join" style="display:none;flex-direction:column;gap:12px">
+      <input id="code-input" class="lobby-input" placeholder="Room code" maxlength="4"
+        style="text-transform:uppercase;letter-spacing:0.15em;font-size:18px;text-align:center" />
+      <button class="lobby-btn" id="join-btn">Join →</button>
+      <button class="lobby-btn secondary" id="back-btn">← Back</button>
+    </div>
+
+    <div id="step-lobby" style="display:none;flex-direction:column;gap:14px">
+      <div style="text-align:center;font-size:11px;color:rgba(255,255,255,0.3);letter-spacing:0.08em;text-transform:uppercase">Room Code</div>
+      <div id="room-code-display">——</div>
+      <div id="player-list">Waiting for players…</div>
+      <div id="lobby-status">Waiting for host to start…</div>
+      <button class="lobby-btn" id="start-btn" style="display:none">Start Game ▶</button>
+    </div>
+
+    <div id="lobby-error" style="font-size:13px;color:#f87c7c;min-height:18px;text-align:center"></div>
+  </div>
+</div>
+
+<div id="blind-overlay">
+  <div id="blind-hud">
+    <h2>🙈 You are BLINDFOLDED</h2>
+    <div style="font-size:13px;color:rgba(255,255,255,0.4);margin-bottom:16px">Listen to your team. Move the block, then DROP!</div>
+    <div class="position-display" id="blind-pos-display">X: 0</div>
+    <div class="size-display" id="blind-size-display">Size: Medium (2×1)</div>
+  </div>
+  <div id="blind-controls">
+    <div></div>
+    <button class="ctrl-btn" id="btn-size-up" title="Size Up (W)">▲</button>
+    <div></div>
+    <button class="ctrl-btn" id="btn-left" title="Left (A/←)">◀</button>
+    <div style="display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,0.2);font-size:10px">MOVE</div>
+    <button class="ctrl-btn" id="btn-right" title="Right (D/→)">▶</button>
+    <div></div>
+    <button class="ctrl-btn" id="btn-size-down" title="Size Down (S)">▼</button>
+    <div></div>
+    <button class="ctrl-btn drop-btn" id="btn-drop" title="Drop (Space)">DROP ⬇</button>
+  </div>
+</div>
+
+<div id="score-flash">
+  <div class="round-label" id="flash-round">Round 1</div>
+  <div class="score-val" id="flash-score">0</div>
+  <div class="score-label">tower height points</div>
+</div>
+
+<div id="chat-panel">
+  <div id="chat-header">Team Chat</div>
+  <div id="chat-messages"></div>
+  <div id="chat-input-row">
+    <input id="chat-input" placeholder="Message…" maxlength="200" autocomplete="off" />
+    <button id="chat-send">↑</button>
+  </div>
+</div>
+
+</body>
+</html>

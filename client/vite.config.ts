@@ -3,9 +3,10 @@ import path from "path";
 
 export default defineConfig({
   root: ".",
+  base: "./",
   build: {
     outDir: "dist",
-    sourcemap: true,
+    sourcemap: false,
   },
   resolve: {
     alias: {
